@@ -88,9 +88,9 @@ import org.apache.hadoop.hbase.io.hfile.HFile;
 import org.apache.hadoop.hbase.ipc.RpcServerInterface;
 import org.apache.hadoop.hbase.ipc.ServerNotRunningYetException;
 import org.apache.hadoop.hbase.mapreduce.MapreduceTestingShim;
-import org.apache.hadoop.hbase.master.AssignmentManager;
+import org.apache.hadoop.hbase.master.assignment.AssignmentManager;
+import org.apache.hadoop.hbase.master.assignment.RegionStates;
 import org.apache.hadoop.hbase.master.HMaster;
-import org.apache.hadoop.hbase.master.RegionStates;
 import org.apache.hadoop.hbase.master.ServerManager;
 import org.apache.hadoop.hbase.regionserver.BloomType;
 import org.apache.hadoop.hbase.regionserver.HRegion;
@@ -3993,8 +3993,7 @@ public class HBaseTestingUtility extends HBaseCommonTestingUtility {
         if (master == null) return false;
         AssignmentManager am = master.getAssignmentManager();
         if (am == null) return false;
-        final RegionStates regionStates = am.getRegionStates();
-        return !regionStates.isRegionsInTransition();
+        return !am.hasRegionsInTransition();
       }
     };
   }

@@ -45,11 +45,10 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.replication.ReplicationAdmin;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.io.hfile.TestHFile;
-import org.apache.hadoop.hbase.master.AssignmentManager;
-import org.apache.hadoop.hbase.master.RegionState;
-import org.apache.hadoop.hbase.master.RegionStates;
-import org.apache.hadoop.hbase.master.procedure.MasterProcedureEnv;
-import org.apache.hadoop.hbase.master.procedure.SplitTableRegionProcedure;
+import org.apache.hadoop.hbase.master.assignment.AssignmentManager;
+import org.apache.hadoop.hbase.master.assignment.RegionStates;
+import org.apache.hadoop.hbase.master.assignment.RegionStates.RegionStateNode;
+import org.apache.hadoop.hbase.master.RegionPlan;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.regionserver.TestEndToEndSplitTransaction;
@@ -1591,72 +1590,6 @@ public class TestHBaseFsckOneRS extends BaseTestHBaseFsck {
       assertNoErrors(doFsck(conf, false));
       assertEquals(ROWKEYS.length, countRows());
     } finally {
-      cleanupTable(tableName);
-    }
-  }
-
-  @Test (timeout=180000)
-  public void testCleanUpDaughtersNotInMetaAfterFailedSplit() throws Exception {
-    final TableName tableName = TableName.valueOf(name.getMethodName());
-    MiniHBaseCluster cluster = TEST_UTIL.getHBaseCluster();
-    try {
-      HTableDescriptor desc = new HTableDescriptor(tableName);
-      desc.addFamily(new HColumnDescriptor(Bytes.toBytes("f")));
-      createTable(TEST_UTIL, desc, null);
-
-      tbl = connection.getTable(desc.getTableName());
-      for (int i = 0; i < 5; i++) {
-        Put p1 = new Put(("r" + i).getBytes());
-        p1.addColumn(Bytes.toBytes("f"), "q1".getBytes(), "v".getBytes());
-        tbl.put(p1);
-      }
-      admin.flush(desc.getTableName());
-      List<HRegion> regions = cluster.getRegions(desc.getTableName());
-      int serverWith = cluster.getServerWith(regions.get(0).getRegionInfo().getRegionName());
-      HRegionServer regionServer = cluster.getRegionServer(serverWith);
-      byte[] parentRegionName = regions.get(0).getRegionInfo().getRegionName();
-      cluster.getServerWith(parentRegionName);
-      // Create daughters without adding to META table
-      MasterProcedureEnv env = cluster.getMaster().getMasterProcedureExecutor().getEnvironment();
-      SplitTableRegionProcedure splitR = new SplitTableRegionProcedure(
-        env, regions.get(0).getRegionInfo(), Bytes.toBytes("r3"));
-      splitR.prepareSplitRegion(env);
-      splitR.setRegionStateToSplitting(env);
-      splitR.closeParentRegionForSplit(env);
-      splitR.createDaughterRegions(env);
-
-      AssignmentManager am = cluster.getMaster().getAssignmentManager();
-      for (RegionState state : am.getRegionStates().getRegionsInTransition()) {
-        am.regionOffline(state.getRegion());
-      }
-
-      Map<HRegionInfo, ServerName> regionsMap = new HashMap<>();
-      regionsMap.put(regions.get(0).getRegionInfo(), regionServer.getServerName());
-      am.assign(regionsMap);
-      am.waitForAssignment(regions.get(0).getRegionInfo());
-      HBaseFsck hbck = doFsck(conf, false);
-      assertErrors(hbck, new HBaseFsck.ErrorReporter.ERROR_CODE[] {
-        HBaseFsck.ErrorReporter.ERROR_CODE.NOT_IN_META_OR_DEPLOYED,
-        HBaseFsck.ErrorReporter.ERROR_CODE.NOT_IN_META_OR_DEPLOYED });
-      // holes are separate from overlap groups
-      assertEquals(0, hbck.getOverlapGroups(tableName).size());
-
-      // fix hole
-      assertErrors(
-        doFsck(conf, false, true, false, false, false, false, false, false, false, false, false,
-          false, null),
-        new HBaseFsck.ErrorReporter.ERROR_CODE[] {
-          HBaseFsck.ErrorReporter.ERROR_CODE.NOT_IN_META_OR_DEPLOYED,
-          HBaseFsck.ErrorReporter.ERROR_CODE.NOT_IN_META_OR_DEPLOYED });
-
-      // check that hole fixed
-      assertNoErrors(doFsck(conf, false));
-      assertEquals(5, countRows());
-    } finally {
-      if (tbl != null) {
-        tbl.close();
-        tbl = null;
-      }
       cleanupTable(tableName);
     }
   }

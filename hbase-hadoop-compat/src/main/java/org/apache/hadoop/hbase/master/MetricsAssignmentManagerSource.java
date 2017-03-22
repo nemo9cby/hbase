@@ -46,12 +46,10 @@ public interface MetricsAssignmentManagerSource extends BaseSource {
   String RIT_COUNT_OVER_THRESHOLD_NAME = "ritCountOverThreshold";
   String RIT_OLDEST_AGE_NAME = "ritOldestAge";
   String RIT_DURATION_NAME = "ritDuration";
+
+  String OPERATION_COUNT_NAME = "operationCount";
   String ASSIGN_TIME_NAME = "assign";
-  String BULK_ASSIGN_TIME_NAME = "bulkAssign";
-
-  void updateAssignmentTime(long time);
-
-  void updateBulkAssignTime(long time);
+  String UNASSIGN_TIME_NAME = "unassign";
 
   /**
    * Set the number of regions in transition.
@@ -75,4 +73,19 @@ public interface MetricsAssignmentManagerSource extends BaseSource {
   void setRITOldestAge(long age);
 
   void updateRitDuration(long duration);
+
+  /**
+   * Increment the count of assignment operation (assign/unassign).
+   */
+  void incrementOperationCounter();
+
+  /**
+   * Add the time took to perform the last assign operation
+   */
+  void updateAssignTime(long time);
+
+  /**
+   * Add the time took to perform the last unassign operation
+   */
+  void updateUnassignTime(long time);
 }

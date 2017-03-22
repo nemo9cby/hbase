@@ -25,13 +25,11 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.classification.InterfaceAudience;
-import org.apache.hadoop.hbase.classification.InterfaceStability;
+import com.google.common.annotations.VisibleForTesting;
 
 @InterfaceAudience.Private
-@InterfaceStability.Evolving
 public abstract class AbstractProcedureScheduler implements ProcedureScheduler {
   private static final Log LOG = LogFactory.getLog(AbstractProcedureScheduler.class);
-
   private final ReentrantLock schedLock = new ReentrantLock();
   private final Condition schedWaitCond = schedLock.newCondition();
   private boolean running = false;

@@ -480,4 +480,15 @@ public class ShortCircuitMasterConnection implements MasterKeepAliveConnection {
     return stub.listReplicationPeers(controller, request);
   }
 
+  @Override
+  public SplitTableRegionResponse splitRegion(RpcController controller, SplitTableRegionRequest request)
+      throws ServiceException {
+    return stub.splitRegion(controller, request);
+  }
+
+  @Override
+  public DispatchMergingRegionsResponse dispatchMergingRegions(RpcController controller,
+      DispatchMergingRegionsRequest request) throws ServiceException {
+    return stub.dispatchMergingRegions(controller, request);
+  }
 }

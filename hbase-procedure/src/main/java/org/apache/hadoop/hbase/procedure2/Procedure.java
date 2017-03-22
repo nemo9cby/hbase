@@ -253,9 +253,8 @@ public abstract class Procedure<TEnvironment> implements Comparable<Procedure> {
    */
   protected StringBuilder toStringSimpleSB() {
     final StringBuilder sb = new StringBuilder();
-    toStringClassDetails(sb);
 
-    sb.append(", procId=");
+    sb.append("procId=");
     sb.append(getProcId());
 
     if (hasParent()) {
@@ -274,6 +273,9 @@ public abstract class Procedure<TEnvironment> implements Comparable<Procedure> {
     if (hasException()) {
       sb.append(", failed=" + getException());
     }
+
+    sb.append(", ");
+    toStringClassDetails(sb);
 
     return sb;
   }

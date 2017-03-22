@@ -50,12 +50,12 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.ipc.RpcServer.Call;
 import org.apache.hadoop.hbase.monitoring.MonitoredRPCHandlerImpl;
-import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.ScanRequest;
-import org.apache.hadoop.hbase.shaded.protobuf.RequestConverter;
-import org.apache.hadoop.hbase.shaded.protobuf.generated.RPCProtos;
-import org.apache.hadoop.hbase.shaded.protobuf.generated.RPCProtos.RequestHeader;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.shaded.com.google.protobuf.Message;
+import org.apache.hadoop.hbase.shaded.protobuf.RequestConverter;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.ScanRequest;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.RPCProtos;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.RPCProtos.RequestHeader;
 import org.apache.hadoop.hbase.testclassification.RPCTests;
 import org.apache.hadoop.hbase.testclassification.SmallTests;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -76,11 +76,11 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
 @Category({RPCTests.class, SmallTests.class})
-public class TestSimpleRpcScheduler {/*
+public class TestSimpleRpcScheduler {
   @Rule
   public final TestRule timeout =
       CategoryBasedTimeout.builder().withTimeout(this.getClass()).
-          withLookingForStuckThread(true).build();*/
+          withLookingForStuckThread(true).build();
 
   private static final Log LOG = LogFactory.getLog(TestSimpleRpcScheduler.class);
 
@@ -434,7 +434,7 @@ public class TestSimpleRpcScheduler {/*
   @Test
   public void testCoDelScheduling() throws Exception {
     CoDelEnvironmentEdge envEdge = new CoDelEnvironmentEdge();
-    envEdge.threadNamePrefixs.add("RpcServer.deafult.FPBQ.Codel.handler");
+    envEdge.threadNamePrefixs.add("RpcServer.default.FPBQ.Codel.handler");
     Configuration schedConf = HBaseConfiguration.create();
     schedConf.setInt(RpcScheduler.IPC_SERVER_MAX_CALLQUEUE_LENGTH, 250);
     schedConf.set(RpcExecutor.CALL_QUEUE_TYPE_CONF_KEY,
@@ -456,7 +456,6 @@ public class TestSimpleRpcScheduler {/*
       for (int i = 0; i < 100; i++) {
         long time = System.currentTimeMillis();
         envEdge.timeQ.put(time);
-        long now = System.currentTimeMillis();
         CallRunner cr = getMockedCallRunner(time, 2);
         // LOG.info("" + i + " " + (System.currentTimeMillis() - now) + " cr=" + cr);
         scheduler.dispatch(cr);

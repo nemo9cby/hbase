@@ -43,11 +43,12 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.MetaTableAccessor;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter;
 import org.apache.hadoop.hbase.master.LoadBalancer;
-import org.apache.hadoop.hbase.master.RegionStates;
+import org.apache.hadoop.hbase.master.assignment.RegionStates;
 import org.apache.hadoop.hbase.master.ServerManager;
 import org.apache.hadoop.hbase.master.balancer.BaseLoadBalancer;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
@@ -235,11 +236,13 @@ public class TestTableFavoredNodes {
     LOG.info("regionA: " + regionA.getEncodedName() + " with FN: " + fnm.getFavoredNodes(regionA));
     LOG.info("regionB: " + regionA.getEncodedName() + " with FN: " + fnm.getFavoredNodes(regionB));
 
+    int countOfRegions = MetaTableAccessor.getRegionCount(TEST_UTIL.getConfiguration(), tableName);
     admin.mergeRegionsAsync(regionA.getEncodedNameAsBytes(),
         regionB.getEncodedNameAsBytes(), false).get(60, TimeUnit.SECONDS);
 
     TEST_UTIL.waitUntilNoRegionsInTransition(WAIT_TIMEOUT);
-    waitUntilTableRegionCountReached(tableName, NUM_REGIONS - 1);
+    int howManyRegions = MetaTableAccessor.getRegionCount(TEST_UTIL.getConfiguration(), tableName);
+    waitUntilTableRegionCountReached(tableName, countOfRegions - 1);
 
     // All regions should have favored nodes
     checkIfFavoredNodeInformationIsCorrect(tableName);

@@ -52,6 +52,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.HBaseFsck;
 import org.apache.hadoop.hbase.util.HBaseFsck.ErrorReporter.ERROR_CODE;
 import org.apache.hadoop.hbase.util.HBaseFsckRepair;
+import org.apache.hadoop.hbase.util.Threads;
 import org.apache.hadoop.hbase.util.hbck.HbckTestingUtil;
 import org.apache.hadoop.hbase.zookeeper.LoadBalancerTracker;
 import org.apache.hadoop.hbase.zookeeper.ZKUtil;
@@ -449,9 +450,6 @@ public class TestMetaWithReplicas {
     // Create a meta replica (this will be the 4th one) and assign it
     HRegionInfo h = RegionReplicaUtil.getRegionInfoForReplica(
         HRegionInfo.FIRST_META_REGIONINFO, 3);
-    // create in-memory state otherwise master won't assign
-    TEST_UTIL.getMiniHBaseCluster().getMaster().getAssignmentManager()
-             .getRegionStates().createRegionState(h);
     TEST_UTIL.assignRegion(h);
     HBaseFsckRepair.waitUntilAssigned(TEST_UTIL.getAdmin(), h);
     // check that problem exists

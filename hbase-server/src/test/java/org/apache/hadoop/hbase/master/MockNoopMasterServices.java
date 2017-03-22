@@ -32,7 +32,9 @@ import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableDescriptors;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.ClusterConnection;
+import org.apache.hadoop.hbase.client.MasterSwitchType;
 import org.apache.hadoop.hbase.executor.ExecutorService;
+import org.apache.hadoop.hbase.master.assignment.AssignmentManager;
 import org.apache.hadoop.hbase.master.locking.LockManager;
 import org.apache.hadoop.hbase.favored.FavoredNodesManager;
 import org.apache.hadoop.hbase.master.normalizer.RegionNormalizer;
@@ -44,7 +46,6 @@ import org.apache.hadoop.hbase.quotas.MasterQuotaManager;
 import org.apache.hadoop.hbase.replication.ReplicationException;
 import org.apache.hadoop.hbase.replication.ReplicationPeerConfig;
 import org.apache.hadoop.hbase.replication.ReplicationPeerDescription;
-import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.hbase.zookeeper.MetaTableLocator;
 import org.apache.hadoop.hbase.zookeeper.ZooKeeperWatcher;
 import org.mockito.Mockito;
@@ -371,6 +372,11 @@ public class MockNoopMasterServices implements MasterServices, Server {
   }
 
   @Override
+  public boolean isSplitOrMergeEnabled(MasterSwitchType switchType) {
+    return false;
+  }
+
+  @Override
   public void addReplicationPeer(String peerId, ReplicationPeerConfig peerConfig)
       throws ReplicationException {
   }
@@ -422,5 +428,11 @@ public class MockNoopMasterServices implements MasterServices, Server {
   @Override
   public LockManager getLockManager() {
     return null;
+  }
+
+  @Override
+  public long dispatchMergingRegions(HRegionInfo region_a, HRegionInfo region_b, boolean forcible, long nonceGroup,
+      long nonce) throws IOException {
+    return 0;
   }
 }

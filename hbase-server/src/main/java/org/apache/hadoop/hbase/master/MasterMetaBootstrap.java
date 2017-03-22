@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.classification.InterfaceAudience;
 import org.apache.hadoop.hbase.client.RegionReplicaUtil;
 import org.apache.hadoop.hbase.client.TableState;
+import org.apache.hadoop.hbase.master.assignment.AssignmentManager;
 import org.apache.hadoop.hbase.monitoring.MonitoredTask;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.ZooKeeperProtos.SplitLogTask.RecoveryMode;
 import org.apache.hadoop.hbase.zookeeper.MetaTableLocator;
@@ -151,7 +152,9 @@ public class MasterMetaBootstrap {
 
     // Work on meta region
     int assigned = 0;
-    long timeout = master.getConfiguration().getLong("hbase.catalog.verification.timeout", 1000);
+    // TODO: Unimplemented
+    // long timeout =
+    //   master.getConfiguration().getLong("hbase.catalog.verification.timeout", 1000);
     if (replicaId == HRegionInfo.DEFAULT_REPLICA_ID) {
       status.setStatus("Assigning hbase:meta region");
     } else {
@@ -160,37 +163,10 @@ public class MasterMetaBootstrap {
 
     // Get current meta state from zk.
     RegionState metaState = MetaTableLocator.getMetaRegionState(master.getZooKeeper(), replicaId);
-    HRegionInfo hri = RegionReplicaUtil.getRegionInfoForReplica(HRegionInfo.FIRST_META_REGIONINFO,
-        replicaId);
-    RegionStates regionStates = assignmentManager.getRegionStates();
-    regionStates.createRegionState(hri, metaState.getState(),
-        metaState.getServerName(), null);
-
-    if (!metaState.isOpened() || !master.getMetaTableLocator().verifyMetaRegionLocation(
-        master.getClusterConnection(), master.getZooKeeper(), timeout, replicaId)) {
-      ServerName currentMetaServer = metaState.getServerName();
-      if (master.getServerManager().isServerOnline(currentMetaServer)) {
-        if (replicaId == HRegionInfo.DEFAULT_REPLICA_ID) {
-          LOG.info("Meta was in transition on " + currentMetaServer);
-        } else {
-          LOG.info("Meta with replicaId " + replicaId + " was in transition on " +
-                    currentMetaServer);
-        }
-        assignmentManager.processRegionsInTransition(Collections.singletonList(metaState));
-      } else {
-        if (currentMetaServer != null) {
-          if (replicaId == HRegionInfo.DEFAULT_REPLICA_ID) {
-            splitMetaLogBeforeAssignment(currentMetaServer);
-            regionStates.logSplit(HRegionInfo.FIRST_META_REGIONINFO);
-            previouslyFailedMetaRSs.add(currentMetaServer);
-          }
-        }
-        LOG.info("Re-assigning hbase:meta with replicaId, " + replicaId +
-            " it was on " + currentMetaServer);
-        assignmentManager.assignMeta(hri);
-      }
-      assigned++;
-    }
+    LOG.debug("meta state from zookeeper: " + metaState);
+    HRegionInfo hri = RegionReplicaUtil.getRegionInfoForReplica(
+      HRegionInfo.FIRST_META_REGIONINFO, replicaId);
+    assignmentManager.assignMeta(hri, metaState.getServerName());
 
     if (replicaId == HRegionInfo.DEFAULT_REPLICA_ID) {
       // TODO: should we prevent from using state manager before meta was initialized?
@@ -206,7 +182,6 @@ public class MasterMetaBootstrap {
       master.getMasterWalManager().splitMetaLog(previouslyFailedMetaRSs);
     }
 
-    assignmentManager.setEnabledTable(TableName.META_TABLE_NAME);
     master.getTableStateManager().start();
 
     // Make sure a hbase:meta location is set. We need to enable SSH here since
@@ -214,7 +189,7 @@ public class MasterMetaBootstrap {
     // by SSH so that system tables can be assigned.
     // No need to wait for meta is assigned = 0 when meta is just verified.
     if (replicaId == HRegionInfo.DEFAULT_REPLICA_ID) enableCrashedServerProcessing(assigned != 0);
-    LOG.info("hbase:meta with replicaId " + replicaId + " assigned=" + assigned + ", location="
+    LOG.info("hbase:meta with replicaId " + replicaId + ", location="
       + master.getMetaTableLocator().getMetaRegionLocation(master.getZooKeeper(), replicaId));
     status.setStatus("META assigned.");
   }

@@ -83,7 +83,6 @@ import org.apache.hadoop.hbase.classification.InterfaceAudience;
 import org.apache.hadoop.hbase.client.ClusterConnection;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionUtils;
-import org.apache.hadoop.hbase.client.NonceGenerator;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RpcRetryingCallerFactory;
 import org.apache.hadoop.hbase.client.locking.EntityLock;
@@ -148,8 +147,6 @@ import org.apache.hadoop.hbase.shaded.protobuf.generated.HBaseProtos.RegionServe
 import org.apache.hadoop.hbase.shaded.protobuf.generated.HBaseProtos.RegionSpecifier;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.HBaseProtos.RegionSpecifier.RegionSpecifierType;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.LockServiceProtos.LockService;
-import org.apache.hadoop.hbase.shaded.protobuf.generated.MasterProtos.GetProcedureResultRequest;
-import org.apache.hadoop.hbase.shaded.protobuf.generated.MasterProtos.GetProcedureResultResponse;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProtos.GetLastFlushedSequenceIdRequest;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProtos.GetLastFlushedSequenceIdResponse;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProtos.RegionServerReportRequest;
@@ -161,8 +158,6 @@ import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProto
 import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProtos.ReportRSFatalErrorRequest;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProtos.ReportRegionStateTransitionRequest;
 import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProtos.ReportRegionStateTransitionResponse;
-import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProtos.SplitTableRegionRequest;
-import org.apache.hadoop.hbase.shaded.protobuf.generated.RegionServerStatusProtos.SplitTableRegionResponse;
 import org.apache.hadoop.hbase.trace.SpanReceiverHost;
 import org.apache.hadoop.hbase.util.Addressing;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -170,7 +165,6 @@ import org.apache.hadoop.hbase.util.CompressionTest;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.FSTableDescriptors;
 import org.apache.hadoop.hbase.util.FSUtils;
-import org.apache.hadoop.hbase.util.ForeignExceptionUtil;
 import org.apache.hadoop.hbase.util.HasThread;
 import org.apache.hadoop.hbase.util.JSONBean;
 import org.apache.hadoop.hbase.util.JvmPauseMonitor;
@@ -199,12 +193,12 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.data.Stat;
 
-import sun.misc.Signal;
-import sun.misc.SignalHandler;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+
+import sun.misc.Signal;
+import sun.misc.SignalHandler;
 
 /**
  * HRegionServer makes a set of HRegions available to clients. It checks in with
@@ -274,7 +268,7 @@ public class HRegionServer extends HasThread implements
   protected ReplicationSinkService replicationSinkHandler;
 
   // Compactions
-  public CompactSplitThread compactSplitThread;
+  public CompactSplit compactSplitThread;
 
   /**
    * Map of regions currently being served by this region server. Key is the
@@ -902,7 +896,7 @@ public class HRegionServer extends HasThread implements
     this.cacheFlusher = new MemStoreFlusher(conf, this);
 
     // Compaction thread
-    this.compactSplitThread = new CompactSplitThread(this);
+    this.compactSplitThread = new CompactSplit(this);
 
     // Background thread to check for compactions; needed if region has not gotten updates
     // in a while. It will take care of not checking too frequently on store-by-store basis.
@@ -1684,7 +1678,7 @@ public class HRegionServer extends HasThread implements
     final static int RANGE_OF_DELAY = 5 * 60 * 1000; // 5 min in milliseconds
     final static int MIN_DELAY_TIME = 0; // millisec
     public PeriodicMemstoreFlusher(int cacheFlushInterval, final HRegionServer server) {
-      super(server.getServerName() + "-MemstoreFlusherChore", server, cacheFlushInterval);
+      super("MemstoreFlusherChore", server, cacheFlushInterval);
       this.server = server;
     }
 
@@ -2110,6 +2104,7 @@ public class HRegionServer extends HasThread implements
             + " to " + code + ": " + response.getErrorMessage());
           return false;
         }
+        LOG.info("TRANSITION REPORTED " + request);
         return true;
       } catch (ServiceException se) {
         IOException ioe = ProtobufUtil.getRemoteException(se);
@@ -2119,82 +2114,8 @@ public class HRegionServer extends HasThread implements
         }
       }
     }
+    LOG.info("TRANSITION NOT REPORTED " + request);
     return false;
-  }
-
-  @Override
-  public long requestRegionSplit(final HRegionInfo regionInfo, final byte[] splitRow) {
-    NonceGenerator ng = clusterConnection.getNonceGenerator();
-    final long nonceGroup = ng.getNonceGroup();
-    final long nonce = ng.newNonce();
-    long procId = -1;
-    SplitTableRegionRequest request =
-        RequestConverter.buildSplitTableRegionRequest(regionInfo, splitRow, nonceGroup, nonce);
-
-    while (keepLooping()) {
-      RegionServerStatusService.BlockingInterface rss = rssStub;
-      try {
-        if (rss == null) {
-          createRegionServerStatusStub();
-          continue;
-        }
-        SplitTableRegionResponse response = rss.splitRegion(null, request);
-
-        //TODO: should we limit the retry number before quitting?
-        if (response == null || (procId = response.getProcId()) == -1) {
-          LOG.warn("Failed to split " + regionInfo + " retrying...");
-          continue;
-        }
-
-        break;
-      } catch (ServiceException se) {
-        // TODO: retry or just fail
-        IOException ioe = ProtobufUtil.getRemoteException(se);
-        LOG.info("Failed to split region, will retry", ioe);
-        if (rssStub == rss) {
-          rssStub = null;
-        }
-      }
-    }
-    return procId;
-  }
-
-  @Override
-  public boolean isProcedureFinished(final long procId) throws IOException {
-    GetProcedureResultRequest request =
-        GetProcedureResultRequest.newBuilder().setProcId(procId).build();
-
-    while (keepLooping()) {
-      RegionServerStatusService.BlockingInterface rss = rssStub;
-      try {
-        if (rss == null) {
-          createRegionServerStatusStub();
-          continue;
-        }
-        // TODO: find a way to get proc result
-        GetProcedureResultResponse response = rss.getProcedureResult(null, request);
-
-        if (response == null) {
-          LOG.warn("Failed to get procedure (id=" + procId + ") status.");
-          return false;
-        } else if (response.getState() == GetProcedureResultResponse.State.RUNNING) {
-          return false;
-        } else if (response.hasException()) {
-          // Procedure failed.
-          throw ForeignExceptionUtil.toIOException(response.getException());
-        }
-        // Procedure completes successfully
-        break;
-      } catch (ServiceException se) {
-        // TODO: retry or just fail
-        IOException ioe = ProtobufUtil.getRemoteException(se);
-        LOG.warn("Failed to get split region procedure result.  Retrying", ioe);
-        if (rssStub == rss) {
-          rssStub = null;
-        }
-      }
-    }
-    return true;
   }
 
   /**
@@ -3419,9 +3340,9 @@ public class HRegionServer extends HasThread implements
   }
 
   /**
-   * @return the underlying {@link CompactSplitThread} for the servers
+   * @return the underlying {@link CompactSplit} for the servers
    */
-  public CompactSplitThread getCompactSplitThread() {
+  public CompactSplit getCompactSplitThread() {
     return this.compactSplitThread;
   }
 

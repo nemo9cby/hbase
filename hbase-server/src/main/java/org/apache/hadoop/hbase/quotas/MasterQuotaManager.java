@@ -312,7 +312,7 @@ public class MasterQuotaManager implements RegionStateListener {
       namespaceQuotaManager.checkQuotaToCreateTable(tName, regions);
     }
   }
-  
+
   public void checkAndUpdateNamespaceRegionQuota(TableName tName, int regions) throws IOException {
     if (enabled) {
       namespaceQuotaManager.checkQuotaToUpdateRegion(tName, regions);
@@ -329,15 +329,24 @@ public class MasterQuotaManager implements RegionStateListener {
     return -1;
   }
 
+  @Override
   public void onRegionMerged(HRegionInfo hri) throws IOException {
     if (enabled) {
       namespaceQuotaManager.updateQuotaForRegionMerge(hri);
     }
   }
 
+  @Override
   public void onRegionSplit(HRegionInfo hri) throws IOException {
     if (enabled) {
       namespaceQuotaManager.checkQuotaToSplitRegion(hri);
+    }
+  }
+
+  @Override
+  public void onRegionSplitReverted(HRegionInfo hri) throws IOException {
+    if (enabled) {
+      this.namespaceQuotaManager.removeRegionFromNamespaceUsage(hri);
     }
   }
 
@@ -476,13 +485,6 @@ public class MasterQuotaManager implements RegionStateListener {
         locks.remove(name);
         locks.notifyAll();
       }
-    }
-  }
-
-  @Override
-  public void onRegionSplitReverted(HRegionInfo hri) throws IOException {
-    if (enabled) {
-      this.namespaceQuotaManager.removeRegionFromNamespaceUsage(hri);
     }
   }
 }
